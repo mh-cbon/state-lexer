@@ -102,7 +102,7 @@ func Test_LexingNumbers(t *testing.T) {
 		token = &tok
 	})
 	if token != nil {
-		t.Error("Expected a nil token, but got %v", *token)
+		t.Errorf("Expected a nil token, but got %v", *token)
 		return
 	}
 }
@@ -189,7 +189,7 @@ func Test_LexerError(t *testing.T) {
 	}
 }
 
-func Example_Lexer() {
+func Example_lexer() {
 	b := bytes.NewBufferString("1 2 ")
 	l := New(b, NumberState)
 	l.ErrorHandler = func(e string) {}
