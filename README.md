@@ -94,3 +94,8 @@ func main() {
 	// }
 }
 ```
+
+# Credits
+
+To both Rob Pike and bbuck for their work! Thanks!
+Writing my very first parser/lexer was really cool :p
