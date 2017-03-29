@@ -51,6 +51,7 @@ type Token struct {
 type L struct {
 	source          io.Reader
 	start, position int
+	readbytes       int
 	buf             []rune
 	p               []byte
 	startState      StateFunc
@@ -59,6 +60,9 @@ type L struct {
 	TokenHandler func(t Token)
 	ErrorHandler func(e string)
 	rewind       runeStack
+	hasNext      bool
+	nextState    StateFunc
+	lastTokens   []*Token
 }
 
 // New creates a returns a lexer ready to parse the given source code.
@@ -70,10 +74,68 @@ func New(src io.Reader, start StateFunc) *L {
 		p:          make([]byte, 1),
 		start:      0,
 		position:   0,
+		readbytes:  0,
 		rewind:     newRuneStack(),
 	}
 }
 
+//NextTokens Reads until at least one token is met, it returns nil a []*Token{nil} at EOF.
+func (l *L) NextTokens() []*Token {
+	if l.hasNext == false {
+		l.TokenHandler = func(t Token) {
+			l.lastTokens = append(l.lastTokens, &t)
+		}
+		l.lastTokens = l.lastTokens[:0]
+		l.nextState = l.startState
+		l.hasNext = true
+	}
+	state := l.nextState
+	l.nextState = state(l)
+	if l.nextState == nil {
+		l.lastTokens = l.lastTokens[:0]
+		l.nextState = l.startState
+		l.hasNext = false
+		return []*Token{nil}
+	}
+	ret := l.lastTokens[:]
+	l.lastTokens = l.lastTokens[:0]
+	return ret
+}
+
+//NextToken Reads until a token is met, it returns nil at EOF.
+func (l *L) NextToken() *Token {
+	var ret *Token
+	if l.hasNext == false {
+		l.TokenHandler = func(t Token) {
+			l.lastTokens = append(l.lastTokens, &t)
+		}
+		l.lastTokens = l.lastTokens[:0]
+		l.nextState = l.startState
+		l.hasNext = true
+	}
+	if len(l.lastTokens) > 0 {
+		ret = l.lastTokens[0]
+		l.lastTokens = l.lastTokens[1:]
+	} else {
+		for l.nextState != nil {
+			state := l.nextState
+			l.nextState = state(l)
+			if len(l.lastTokens) > 0 {
+				break
+			}
+		}
+		if l.nextState == nil {
+			l.lastTokens = append(l.lastTokens, nil)
+		}
+		if len(l.lastTokens) > 0 {
+			ret = l.lastTokens[0]
+			l.lastTokens = l.lastTokens[1:]
+		}
+	}
+	return ret
+}
+
+//Scan Broweses all tokens and invokdes f for each of them.
 func (l *L) Scan(f func(t Token)) {
 	l.TokenHandler = f
 	state := l.startState
@@ -82,7 +144,16 @@ func (l *L) Scan(f func(t Token)) {
 	}
 }
 
-// Current returns the value being being analyzed at this moment.
+// Not Helper function
+func Not(t TokenType, f func(Token)) func(Token) {
+	return func(token Token) {
+		if token.Type != t {
+			f(token)
+		}
+	}
+}
+
+// Current returns the value being analyzed at this moment.
 func (l *L) Current() string {
 	return string(l.buf[l.start:l.position])
 }
@@ -112,6 +183,11 @@ func (l *L) Ignore() {
 	l.buf = l.buf[l.position:]
 	l.start = 0
 	l.position = 0
+}
+
+// ReadBytes returns number of byte reead.
+func (l *L) ReadBytes() int {
+	return l.readbytes
 }
 
 // Peek performs a Next operation immediately followed by a Rewind returning the
@@ -151,6 +227,7 @@ func (l *L) Next() rune {
 	}
 
 	n, _ := l.source.Read(l.p)
+	l.readbytes += n
 	if n == 0 {
 		r, s = EOFRune, 0
 	} else {
