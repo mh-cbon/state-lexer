@@ -1,4 +1,4 @@
-// This package provides a Lexer that functions similarly to Rob Pike's discussion
+// Package lexer provides an implementation that functions similarly to Rob Pike's discussion
 // about lexer design in this [talk](https://www.youtube.com/watch?v=HxaD_trXwRE).
 //
 // Original implementation forked from https://github.com/bbuck/go-lexer.
